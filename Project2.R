@@ -31,19 +31,10 @@ data_table_ts %>% autoplot(Revenue) +
   theme_classic() +
   ggtitle("Walt Disney Company Revenue vs. Time") + xlab("Time") + ylab("Revenue")
 #
-#   Plot log(Revenue) against Time
-#
-data_table_ts <- data_table_ts %>% mutate(LogRevenue = log(Revenue))
-data_table_ts %>% autoplot(LogRevenue) +
-  geom_point(aes(y=LogRevenue, color=Quarter)) +
-  scale_color_manual(values = Quarter_colors) +
-  theme_classic() +
-  ggtitle("Log(Revenue) vs. Time") + xlab("Time") + ylab("Log(Revenue)")
 
-#   Assign NA values to Revenue and log(Revenue) and log(A) for the intervention period 
+#   Assign NA values to Revenue for the intervention period 
 #
 data_table_ts$Revenue[43:48] <- NA
-data_table_ts$LogRevenue[43:48] <- NA
 #
 #   Print data around intervention period
 #
@@ -57,94 +48,367 @@ data_table_ts %>% autoplot(Revenue) +
   theme_classic() +
   ggtitle("Revenue vs. Time without Intervention Period") + xlab("Time") + ylab("Revenue")
 
-#   Plot log(Revenue) against Time with observations removed
-#
-data_table_ts %>% autoplot(LogRevenue) +
-  geom_point(aes(y=LogRevenue, color=Quarter)) +
-  scale_color_manual(values = Quarter_colors) +
-  theme_classic() +
-  ggtitle("Log(Revenue) vs. Time without Intervention Period") + xlab("Time") + ylab("Log(Revenue)")
+### MODEL 1 ###
+model1_ts <- data_table_ts
+n <- nrow(model1_ts)
+n_test <- 6
+n_train <- n - n_test
+n; n_test; n_train
+model1_train <- model1_ts[1:n_train,]
+model1_test <- model1_ts[(n_train+1):n,]
+head(model1_train)
+tail(model1_train)
+head(model1_test)
+tail(model1_test)
 
-
-#   Seasonally adjust LogRevenue using stlplus to allow for missing observations
+#   Seasonally adjust Revenue using stlplus to allow for missing observations
 #
-LogRevenue_time_series <- ts(data_table_ts$LogRevenue, frequency=4)
-components <- stlplus(LogRevenue_time_series, s.window=11, robust=TRUE)
-data_table_ts$season <- components$data$seasonal
-data_table_ts$LogA <- components$data$raw - components$data$seasonal
+Revenue_time_series <- ts(model1_train$Revenue, frequency=4)
+components <- stlplus(Revenue_time_series, s.window=11, robust=TRUE)
+model1_train$season <- components$data$seasonal
+model1_train$A <- components$data$raw - components$data$seasonal
 #
 #   Print full tsibble around intervention period
 #
-print(data_table_ts[40:51,], n=32)
+print(model1_train[40:51,], n=32)
 #
-#   Plot LogA_stlplus against Time for comparison purposes
+#   Plot A against Time for comparison purposes
 #
-data_table_ts %>% autoplot(LogA) +
-  geom_point(aes(y=LogA, color=Quarter)) +
+model1_train %>% autoplot(A) +
+  geom_point(aes(y=A, color=Quarter)) +
   scale_color_manual(values = Quarter_colors) +
   theme_classic() +
-  ggtitle("Seasonally Adjusted Log(Revenue) vs. Time") + xlab("Time") + ylab("Seasonally Adjusted Log(Revenue)")
+  ggtitle("Seasonally Adjusted Revenue vs. Time") + xlab("Time") + ylab("Seasonally Adjusted Revenue")
 #
-#   Compute autocorrelation function of LogA
+#   Compute autocorrelation function of A
 #
-data_table_ts %>% ACF(LogA) %>% autoplot() +
-  ggtitle("ACF Plot of Seasonally Adjusted Log(Revenue)")
+model1_train %>% ACF(A) %>% autoplot() +
+  ggtitle("ACF Plot of Seasonally Adjusted Revenue")
 #
 #   Compute KPSS test for nonstationary data
 #
-unitroot_kpss(data_table_ts$LogA)
+unitroot_kpss(model1_train$A)
 #
-#   Plot diff_LogA against Time
+#   Plot diff_A against Time
 #
-data_table_ts <- data_table_ts %>% mutate(diff_LogA = difference(LogA,1))
-mean_diff_LogA <- mean(data_table_ts$diff_LogA, na.rm=TRUE)
-data_table_ts %>% autoplot(diff_LogA) +
-  geom_point(aes(y=diff_LogA, color=Quarter)) +
-  geom_hline(aes(yintercept=mean_diff_LogA), lty=2) +
+model1_train <- model1_train %>% mutate(diff_A = difference(A,1))
+mean_diff_A <- mean(model1_train$diff_A, na.rm=TRUE)
+model1_train %>% autoplot(diff_A) +
+  geom_point(aes(y=diff_A, color=Quarter)) +
+  geom_hline(aes(yintercept=mean_diff_A), lty=2) +
   scale_color_manual(values = Quarter_colors) +
   theme_classic() +
-  ggtitle("First Differences of Seasonally-Adjusted Log(Revenue) vs. Time") + xlab("Time") + ylab("diff_LogA")
+  ggtitle("First Differences of Seasonally-Adjusted Revenue vs. Time") + xlab("Time") + ylab("diff_A")
 #
-#   Compute autocorrelation function of diff_LogA
+#   Compute autocorrelation function of diff_A
 #
-data_table_ts %>% ACF(diff_LogA) %>% autoplot() +
+model1_train %>% ACF(diff_A) %>% autoplot() +
   ggtitle("ACF Plot of the First Differences")
 #
 #   Compute KPSS test for nonstationary data
 #
-unitroot_kpss(data_table_ts$diff_LogA)
+unitroot_kpss(model1_train$diff_A)
 #
-#   Use ARIMA to select best ARIMA(p,d,q) model for LogA
+#   Use ARIMA to select best ARIMA(p,d,q) model for A
 #
-result_ARIMA_LogA <- data_table_ts %>% 
-  model(ARIMA(LogA ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
-report(result_ARIMA_LogA)
+result_ARIMA_A <- model1_train %>% 
+  model(ARIMA(A ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
+report(result_ARIMA_A)
 #
 #   Check the assumptions
 #
-result_ARIMA_LogA %>% gg_tsresiduals()
-result_ARIMA_LogA_augment <- augment(result_ARIMA_LogA)
-ad.test(result_ARIMA_LogA_augment$.resid)
+result_ARIMA_A %>% gg_tsresiduals()
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+ad.test(result_ARIMA_A_augment$.resid)
+
+# 
+#   Determine if outlier should be removed
+# 
+scale(result_ARIMA_A_augment$.resid) |> # find the z-score of all the points
+  max(na.rm = TRUE) # get the outlier's z-score
+
 #
-#   Compute forecasts for LogA
+#   Compute forecasts for A
 #
-result_ARIMA_LogA_forecast <- result_ARIMA_LogA %>% forecast(h=6)
-forecast_LogA <- result_ARIMA_LogA_forecast$.mean
-forecast_LogA
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=6)
+forecast_A <- result_ARIMA_A_forecast$.mean
+forecast_A
 #
-#   Print and store forecast variances for LogA
+#   Print and store forecast variances for A
 #
-var_forecast_errors_LogA <- distributional::variance(result_ARIMA_LogA_forecast$LogA)
-var_forecast_errors_LogA
+var_forecast_errors_A <- distributional::variance(result_ARIMA_A_forecast$A)
+var_forecast_errors_A
 #
 #   Compute forecasts for season
 #
-result_ARIMA_season <- data_table_ts %>% 
-  model(ARIMA(season ~ 0 + pdq(0,0,0) + PDQ(0,1,0)))
+result_ARIMA_season <- model1_train %>% 
+  model(ARIMA(season ~ pdq(0,0,0) + PDQ(0,1,0)))
 report(result_ARIMA_season)
 result_ARIMA_season_forecast <- result_ARIMA_season %>% forecast(h=6)
 forecast_season <- result_ARIMA_season_forecast$.mean
 forecast_season
+
+#   Compute in-sample forecasts for Revenue
+#
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+result_ARIMA_season_augment <- augment(result_ARIMA_season)
+model1_train$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
+  result_ARIMA_season_augment$.fitted
+
+#   Forecast for n_test = 24 months and incorporate into data_table_ts_test
+#
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=n_test)
+result_ARIMA_A_forecast$.mean
+model1_test <- model1_test %>% 
+  add_column(Fcast_A = result_ARIMA_A_forecast$.mean)
+#
+#   Incorporate forecasts of next 24 months of seasonal factors
+#
+model1_test <- model1_test %>% 
+  add_column(Fcast_season = forecast_season)
+
+#   Compute forecast of log(Homes) and Homes for the test data set
+#
+model1_test <- model1_test %>% 
+  mutate(Fcast_Revenue = Fcast_A + Fcast_season)
+print(model1_test)
+#
+
+#   Plot in-sample and out-of-sample forecasts
+#
+model1_train %>% autoplot(Revenue) +
+  geom_line(aes(y=insample_Revenue), color="red") +
+  geom_line(data = model1_test, aes(x=qtr,  y=Fcast_Revenue), color="blue") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  ggtitle("Model 1 In-sample Forecast") + xlab("Time") + ylab("Revenue")
+#
+
+#
+#   Compute root mean squared error
+#
+model1_test <- model1_test %>% mutate(Error = Revenue - Fcast_Revenue)
+print(model1_test,n=6)
+RMSE <- sqrt(sum(model1_test$Error^2)/6)
+RMSE
+#
+#   Compute mean absolute error
+#
+MAE <- sum(abs(model1_test$Error)/6)
+MAE
+
+### MODEL 2 ###
+
+
+model2_ts <- data_table_ts[17:nrow(data_table_ts),]
+
+n <- nrow(model2_ts)
+n_test <- 6
+n_train <- n - n_test
+n; n_test; n_train
+model2_train <- model2_ts[1:n_train,]
+model2_test <- model2_ts[(n_train+1):n,]
+head(model2_train)
+tail(model2_train)
+head(model2_test)
+tail(model2_test)
+
+#   Seasonally adjust Revenue using stlplus to allow for missing observations
+#
+Revenue_time_series <- ts(model2_train$Revenue, frequency=4)
+components <- stlplus(Revenue_time_series, s.window=11, robust=TRUE)
+model2_train$season <- components$data$seasonal
+model2_train$A <- components$data$raw - components$data$seasonal
+#
+#   Print full tsibble around intervention period
+#
+print(model2_train[24:35,])
+#
+#   Plot A against Time for comparison purposes
+#
+model2_train %>% autoplot(A) +
+  geom_point(aes(y=A, color=Quarter)) +
+  scale_color_manual(values = Quarter_colors) +
+  theme_classic() +
+  ggtitle("Seasonally Adjusted Revenue vs. Time") + xlab("Time") + ylab("Seasonally Adjusted Revenue")
+#
+#   Compute autocorrelation function of A
+#
+model2_train %>% ACF(A) %>% autoplot() +
+  ggtitle("ACF Plot of Seasonally Adjusted Revenue")
+#
+#   Compute KPSS test for nonstationary data
+#
+unitroot_kpss(model2_train$A)
+#
+#   Plot diff_A against Time
+#
+model2_train <- model2_train %>% mutate(diff_A = difference(A,1))
+mean_diff_A <- mean(model2_train$diff_A, na.rm=TRUE)
+model2_train %>% autoplot(diff_A) +
+  geom_point(aes(y=diff_A, color=Quarter)) +
+  geom_hline(aes(yintercept=mean_diff_A), lty=2) +
+  scale_color_manual(values = Quarter_colors) +
+  theme_classic() +
+  ggtitle("First Differences of Seasonally-Adjusted Revenue vs. Time") + xlab("Time") + ylab("diff_A")
+#
+#   Compute autocorrelation function of diff_A
+#
+model2_train %>% ACF(diff_A) %>% autoplot() +
+  ggtitle("ACF Plot of the First Differences")
+#
+#   Compute KPSS test for nonstationary data
+#
+unitroot_kpss(model2_train$diff_A)
+#
+#   Use ARIMA to select best ARIMA(p,d,q) model for A
+#
+result_ARIMA_A <- model2_train %>% 
+  model(ARIMA(A ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
+report(result_ARIMA_A)
+#
+#   Check the assumptions
+#
+result_ARIMA_A %>% gg_tsresiduals()
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+ad.test(result_ARIMA_A_augment$.resid)
+
+# 
+#   Determine if outlier should be removed
+# 
+scale(result_ARIMA_A_augment$.resid) |> # find the z-score of all the points
+  max(na.rm = TRUE) # get the outlier's z-score
+
+#
+#   Compute forecasts for A
+#
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=6)
+forecast_A <- result_ARIMA_A_forecast$.mean
+forecast_A
+#
+#   Print and store forecast variances for A
+#
+var_forecast_errors_A <- distributional::variance(result_ARIMA_A_forecast$A)
+var_forecast_errors_A
+#
+#   Compute forecasts for season
+#
+result_ARIMA_season <- model2_train %>% 
+  model(ARIMA(season ~ pdq(0,0,0) + PDQ(0,1,0)))
+report(result_ARIMA_season)
+result_ARIMA_season_forecast <- result_ARIMA_season %>% forecast(h=6)
+forecast_season <- result_ARIMA_season_forecast$.mean
+forecast_season
+
+#   Compute in-sample forecasts for Revenue
+#
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+result_ARIMA_season_augment <- augment(result_ARIMA_season)
+model2_train$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
+  result_ARIMA_season_augment$.fitted
+
+#   Forecast for n_test = 24 months and incorporate into data_table_ts_test
+#
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=n_test)
+result_ARIMA_A_forecast$.mean
+model2_test <- model2_test %>% 
+  add_column(Fcast_A = result_ARIMA_A_forecast$.mean)
+#
+#   Incorporate forecasts of next 24 months of seasonal factors
+#
+model2_test <- model2_test %>% 
+  add_column(Fcast_season = forecast_season)
+
+#   Compute forecast of log(Homes) and Homes for the test data set
+#
+model2_test <- model2_test %>% 
+  mutate(Fcast_Revenue = Fcast_A + Fcast_season)
+print(model2_test)
+#
+
+#   Plot in-sample and out-of-sample forecasts
+#
+model2_train %>% autoplot(Revenue) +
+  geom_line(aes(y=insample_Revenue), color="red") +
+  geom_line(data = model2_test, aes(x=qtr,  y=Fcast_Revenue), color="blue") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  ggtitle("Model 2 In-sample Forecast") + xlab("Time") + ylab("Revenue")
+#
+
+#
+#   Compute root mean squared error
+#
+model2_test <- model2_test %>% mutate(Error = Revenue - Fcast_Revenue)
+print(model2_test,n=6)
+RMSE <- sqrt(sum(model2_test$Error^2)/6)
+RMSE
+#
+#   Compute mean absolute error
+#
+MAE <- sum(abs(model2_test$Error)/6)
+MAE
+
+
+### FINAL MODEL ###
+
+#   Use ARIMA to select best ARIMA(p,d,q) model for A
+#
+result_ARIMA_A <- model1_train %>% 
+  model(ARIMA(A ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
+report(result_ARIMA_A)
+#
+#   Check the assumptions
+#
+result_ARIMA_A %>% gg_tsresiduals()
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+ad.test(result_ARIMA_A_augment$.resid)
+
+# 
+#   Determine if outlier should be removed
+# 
+scale(result_ARIMA_A_augment$.resid) |> # find the z-score of all the points
+  max(na.rm = TRUE) # get the outlier's z-score
+
+#
+#   Compute forecasts for A
+#
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=10)
+forecast_A <- result_ARIMA_A_forecast$.mean
+forecast_A
+#
+#   Print and store forecast variances for A
+#
+var_forecast_errors_A <- distributional::variance(result_ARIMA_A_forecast$A)
+var_forecast_errors_A
+#
+#   Compute forecasts for season
+#
+result_ARIMA_season <- model1_train %>% 
+  model(ARIMA(season ~ pdq(0,0,0) + PDQ(0,1,0)))
+report(result_ARIMA_season)
+result_ARIMA_season_forecast <- result_ARIMA_season %>% forecast(h=10)
+forecast_season <- result_ARIMA_season_forecast$.mean
+forecast_season
+
+#   Compute in-sample forecasts for Revenue
+#
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
+result_ARIMA_season_augment <- augment(result_ARIMA_season)
+model1_train$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
+  result_ARIMA_season_augment$.fitted
+
+
+#   Compute forecast of log(Homes) and Homes for the test data set
+#
+result_ARIMA_A_forecast$season <- forecast_season
+result_ARIMA_A_forecast <- result_ARIMA_A_forecast %>% 
+  mutate(Fcast_Revenue = .mean + season)
+print(result_ARIMA_A_forecast)
+#
+
+#   Plot in-
+
 #
 #   Print and store forecast variances for season
 #
@@ -153,45 +417,32 @@ var_forecast_errors_season
 #
 #   Compute correlation between epsilon(t) and a(t)
 #
-result_ARIMA_LogA_augment <- augment(result_ARIMA_LogA)
+result_ARIMA_A_augment <- augment(result_ARIMA_A)
 result_ARIMA_season_augment <- augment(result_ARIMA_season)
-correlation <- cor(result_ARIMA_LogA_augment$.resid, 
+correlation <- cor(result_ARIMA_A_augment$.resid, 
                    result_ARIMA_season_augment$.resid, use = 'complete') 
 correlation
 #
-#   Compute variances for prediction intervals for LogRevenue
+#   Compute variances for prediction intervals for Revenue
 #
-covariance <- sqrt(var_forecast_errors_LogA) * sqrt(var_forecast_errors_season) * correlation
-variance <- var_forecast_errors_LogA + var_forecast_errors_season + 2 * covariance
+covariance <- sqrt(var_forecast_errors_A) * sqrt(var_forecast_errors_season) * correlation
+variance <- var_forecast_errors_A + var_forecast_errors_season + 2 * covariance
 variance
-#
-#   Compute prediction intervals for LogRevenue
-#
-forecast_LogRevenue <- forecast_LogA + forecast_season
-forecast_LogRevenue
-z_value <- qnorm(0.975, 0, 1)
-PI_low_LogRevenue <- forecast_LogRevenue - z_value * sqrt(variance)
-PI_up_LogRevenue  <- forecast_LogRevenue + z_value * sqrt(variance)
-PI_low_LogRevenue
-PI_up_LogRevenue
 #
 #   Compute prediction intervals for Revenue
 #
-forecast_Revenue <- exp(forecast_LogRevenue)
+forecast_Revenue <- forecast_A + forecast_season
 forecast_Revenue
-PI_low_Revenue <- exp(PI_low_LogRevenue)
-PI_up_Revenue  <- exp(PI_up_LogRevenue)
+z_value <- qnorm(0.975, 0, 1)
+PI_low_Revenue <- forecast_Revenue - z_value * sqrt(variance)
+PI_up_Revenue  <- forecast_Revenue + z_value * sqrt(variance)
 PI_low_Revenue
 PI_up_Revenue
-#
-#   Compute in-sample forecasts for Revenue
-#
-data_table_ts$insample_Revenue <- exp(result_ARIMA_LogA_augment$.fitted + 
-                                      result_ARIMA_season_augment$.fitted)
+
 #
 #   Create tsibble for plotting out-of-sample forecasts
 #
-forecast_ts <- tsibble(Quarter_index = yearquarter("2025 Q1") + 0:5,
+forecast_ts <- tsibble(Quarter_index = yearquarter("2023 Q3") + 0:9,
                        forecast_Revenue = forecast_Revenue,
                        PI_low_Revenue = PI_low_Revenue,
                        PI_up_Revenue = PI_up_Revenue,
@@ -200,16 +451,20 @@ head(forecast_ts)
 #
 #   Plot in-sample and out-of-sample forecasts
 #
-data_table_ts %>% autoplot(Revenue) +
-  geom_line(aes(y=insample_Revenue), color="red") +
+model1_ts %>% autoplot(Revenue) +
+  geom_line(data=model1_train,aes( y=insample_Revenue), color="red") +
   geom_line(data = forecast_ts, aes(x=Quarter_index,  y=forecast_Revenue), color="blue") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
   ggtitle("Revenue vs. Time") + xlab("Time") + ylab("Revenue")
 #
+
+
+
+# fix this!
 #   Focus plot on out-of-sample forecasts and prediction intervals
 #
-data_table_ts[50:60,] %>% autoplot(Revenue) +
+model1_ts[50:60,] %>% autoplot(Revenue) +
   geom_point(aes(y=Revenue)) +
   geom_line(aes(y=insample_Revenue), color="red") +
   geom_point(aes(y=insample_Revenue), color="red") +
