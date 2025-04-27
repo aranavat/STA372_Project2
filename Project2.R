@@ -1,4 +1,3 @@
-
 library(tidyverse)
 library(fpp3)
 library(nortest)
@@ -18,6 +17,7 @@ tail(data_table_ts)
 #
 data_table_ts$Quarter <- as.factor(data_table_ts$Quarter)
 head(data_table_ts)
+
 #
 #   Set colors
 #
@@ -155,14 +155,14 @@ result_ARIMA_season_augment <- augment(result_ARIMA_season)
 model1_train$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
   result_ARIMA_season_augment$.fitted
 
-#   Forecast for n_test = 24 months and incorporate into data_table_ts_test
+#   Forecast for n_test = 6 quarters and incorporate into data_table_ts_test
 #
 result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=n_test)
 result_ARIMA_A_forecast$.mean
 model1_test <- model1_test %>% 
   add_column(Fcast_A = result_ARIMA_A_forecast$.mean)
 #
-#   Incorporate forecasts of next 24 months of seasonal factors
+#   Incorporate forecasts of next 6 quarters of seasonal factors
 #
 model1_test <- model1_test %>% 
   add_column(Fcast_season = forecast_season)
@@ -273,12 +273,6 @@ result_ARIMA_A %>% gg_tsresiduals()
 result_ARIMA_A_augment <- augment(result_ARIMA_A)
 ad.test(result_ARIMA_A_augment$.resid)
 
-# 
-#   Determine if outlier should be removed
-# 
-scale(result_ARIMA_A_augment$.resid) |> # find the z-score of all the points
-  max(na.rm = TRUE) # get the outlier's z-score
-
 #
 #   Compute forecasts for A
 #
@@ -352,11 +346,21 @@ MAE
 
 ### FINAL MODEL ###
 
+# Seasonally adjust the entire data set (including the test points)
+final_model_ts <- data_table_ts
+
+Revenue_time_series <- ts(final_model_ts$Revenue, frequency=4)
+components <- stlplus(Revenue_time_series, s.window=11, robust=TRUE)
+final_model_ts$season <- components$data$seasonal
+final_model_ts$A <- components$data$raw - components$data$seasonal
+
 #   Use ARIMA to select best ARIMA(p,d,q) model for A
 #
-result_ARIMA_A <- model1_train %>% 
-  model(ARIMA(A ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
+
+result_ARIMA_A <- final_model_ts %>% 
+  model(ARIMA(A ~ 1 + pdq(0, 1, 0) + PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
 report(result_ARIMA_A)
+
 #
 #   Check the assumptions
 #
@@ -364,16 +368,10 @@ result_ARIMA_A %>% gg_tsresiduals()
 result_ARIMA_A_augment <- augment(result_ARIMA_A)
 ad.test(result_ARIMA_A_augment$.resid)
 
-# 
-#   Determine if outlier should be removed
-# 
-scale(result_ARIMA_A_augment$.resid) |> # find the z-score of all the points
-  max(na.rm = TRUE) # get the outlier's z-score
-
 #
 #   Compute forecasts for A
 #
-result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=10)
+result_ARIMA_A_forecast <- result_ARIMA_A %>% forecast(h=4)
 forecast_A <- result_ARIMA_A_forecast$.mean
 forecast_A
 #
@@ -384,10 +382,10 @@ var_forecast_errors_A
 #
 #   Compute forecasts for season
 #
-result_ARIMA_season <- model1_train %>% 
+result_ARIMA_season <- final_model_ts %>% 
   model(ARIMA(season ~ pdq(0,0,0) + PDQ(0,1,0)))
 report(result_ARIMA_season)
-result_ARIMA_season_forecast <- result_ARIMA_season %>% forecast(h=10)
+result_ARIMA_season_forecast <- result_ARIMA_season %>% forecast(h=4)
 forecast_season <- result_ARIMA_season_forecast$.mean
 forecast_season
 
@@ -395,7 +393,7 @@ forecast_season
 #
 result_ARIMA_A_augment <- augment(result_ARIMA_A)
 result_ARIMA_season_augment <- augment(result_ARIMA_season)
-model1_train$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
+final_model_ts$insample_Revenue <- result_ARIMA_A_augment$.fitted + 
   result_ARIMA_season_augment$.fitted
 
 
@@ -405,9 +403,6 @@ result_ARIMA_A_forecast$season <- forecast_season
 result_ARIMA_A_forecast <- result_ARIMA_A_forecast %>% 
   mutate(Fcast_Revenue = .mean + season)
 print(result_ARIMA_A_forecast)
-#
-
-#   Plot in-
 
 #
 #   Print and store forecast variances for season
@@ -442,7 +437,7 @@ PI_up_Revenue
 #
 #   Create tsibble for plotting out-of-sample forecasts
 #
-forecast_ts <- tsibble(Quarter_index = yearquarter("2023 Q3") + 0:9,
+forecast_ts <- tsibble(Quarter_index = yearquarter("2025 Q1") + 0:3,
                        forecast_Revenue = forecast_Revenue,
                        PI_low_Revenue = PI_low_Revenue,
                        PI_up_Revenue = PI_up_Revenue,
@@ -451,8 +446,8 @@ head(forecast_ts)
 #
 #   Plot in-sample and out-of-sample forecasts
 #
-model1_ts %>% autoplot(Revenue) +
-  geom_line(data=model1_train,aes( y=insample_Revenue), color="red") +
+final_model_ts %>% autoplot(Revenue) +
+  geom_line(data=final_model_ts,aes( y=insample_Revenue), color="red") +
   geom_line(data = forecast_ts, aes(x=Quarter_index,  y=forecast_Revenue), color="blue") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
@@ -464,7 +459,7 @@ model1_ts %>% autoplot(Revenue) +
 # fix this!
 #   Focus plot on out-of-sample forecasts and prediction intervals
 #
-model1_ts[50:60,] %>% autoplot(Revenue) +
+final_model_ts[50:60,] %>% autoplot(Revenue) +
   geom_point(aes(y=Revenue)) +
   geom_line(aes(y=insample_Revenue), color="red") +
   geom_point(aes(y=insample_Revenue), color="red") +
