@@ -182,7 +182,7 @@ Revenue_time_series <- ts(model2_train$Revenue, frequency=4)
 components <- stlplus(Revenue_time_series, s.window=11, robust=TRUE)
 model2_train$season <- components$data$seasonal
 model2_train$A <- components$data$raw - components$data$seasonal
-print(model2_train[40:51,])
+print(model2_train[24:35,])
 
 #   Plot A against Time 
 model2_train %>% autoplot(A) +
@@ -282,6 +282,34 @@ components <- stlplus(Revenue_time_series, s.window=11, robust=TRUE)
 data_table_ts$season <- components$data$seasonal
 data_table_ts$A <- components$data$raw - components$data$seasonal
 
+#   Compute autocorrelation function of A
+data_table_ts %>% ACF(A) %>% autoplot() +
+  ggtitle("ACF Plot of Seasonally Adjusted Revenue")
+
+#   Compute KPSS test for nonstationary data
+unitroot_kpss(data_table_ts$A)
+
+#   Compute the first differences
+data_table_ts <- data_table_ts %>% mutate(diff_A = difference(A,1))
+mean_diff_A <- mean(data_table_ts$diff_A, na.rm=TRUE)
+
+#   Plot diff_A against Time
+data_table_ts %>% autoplot(diff_A) +
+  geom_point(aes(y=diff_A, color=Quarter)) +
+  geom_hline(aes(yintercept=mean_diff_A), lty=2) +
+  scale_color_manual(values = Quarter_colors) +
+  theme_classic() +
+  ggtitle("First Differences of Seasonally-Adjusted Revenue vs. Time") + 
+  xlab("Time") + 
+  ylab("diff_A")
+
+#   Compute autocorrelation function of diff_A
+data_table_ts %>% ACF(diff_A) %>% autoplot() +
+  ggtitle("ACF Plot of the First Differences")
+
+#   Compute KPSS test for nonstationary data
+unitroot_kpss(data_table_ts$diff_A)
+
 #   Use ARIMA to select best ARIMA(p,d,q) model for A
 result_ARIMA_A <- data_table_ts %>% 
   model(ARIMA(A ~ PDQ(0,0,0), stepwise=FALSE, approximation=FALSE, trace=FALSE))
@@ -352,7 +380,7 @@ forecast_ts <- tsibble(Quarter_index = yearquarter("2025 Q1") + 0:3,
                        PI_low_Revenue = PI_low_Revenue,
                        PI_up_Revenue = PI_up_Revenue,
                        index = Quarter_index)
-forecast_ts
+print.data.frame(forecast_ts)
 
 #   Plot in-sample and out-of-sample forecasts
 data_table_ts %>% autoplot(Revenue) +
@@ -360,7 +388,7 @@ data_table_ts %>% autoplot(Revenue) +
   geom_line(data = forecast_ts, aes(x=Quarter_index,  y=forecast_Revenue), color="blue") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-  ggtitle("Revenue vs. Time") + xlab("Time") + ylab("Revenue")
+  ggtitle("In and Out-of-Sample Forecasts of Revenue") + xlab("Time") + ylab("Revenue")
 
 #   Focus plot on out-of-sample forecasts and prediction intervals
 data_table_ts[50:60,] %>% autoplot(Revenue) +
@@ -375,4 +403,4 @@ data_table_ts[50:60,] %>% autoplot(Revenue) +
   geom_line(data = forecast_ts, aes(x=Quarter_index,  y=PI_up_Revenue),  color="blue", lty=2) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-  ggtitle("Revenue vs. Time") + xlab("Time") + ylab("Revenue")
+  ggtitle("Revenue Forecasts and Prediction Intervals") + xlab("Time") + ylab("Revenue")
