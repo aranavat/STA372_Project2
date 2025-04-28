@@ -48,7 +48,7 @@ data_table_ts %>% autoplot(Revenue) +
   ylab("Revenue")
 
 #
-#   MODEL 1 
+#   MODEL 1: Starting 2010 Q1 
 #
 
 #   split into training and testing data sets
@@ -160,7 +160,7 @@ MAE <- sum(abs(model1_test$Error)/6)
 MAE
 
 #
-#   MODEL 2
+#   MODEL 2 : Starting 2014 Q1
 #
 
 model2_ts <- data_table_ts[17:nrow(data_table_ts),]
