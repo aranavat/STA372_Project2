@@ -150,8 +150,8 @@ model1_test <- model1_test %>%
 print(model1_test)
 
 #   Plot in-sample and out-of-sample forecasts
-model1_train %>% autoplot(Revenue) +
-  geom_line(aes(y=insample_Revenue), color="red") +
+data_table_ts %>% autoplot(Revenue) +
+  geom_line(data = model1_train, aes(y=insample_Revenue), color="red") +
   geom_line(data = model1_test, aes(x=qtr,  y=Fcast_Revenue), color="blue") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
@@ -271,12 +271,12 @@ model2_test <- model2_test %>%
 print(model2_test)
 
 #   Plot in-sample and out-of-sample forecasts
-model2_train %>% autoplot(Revenue) +
-  geom_line(aes(y=insample_Revenue), color="red") +
+data_table_ts %>% autoplot(Revenue) +
+  geom_line(data = model2_train, aes(y=insample_Revenue), color="red") +
   geom_line(data = model2_test, aes(x=qtr,  y=Fcast_Revenue), color="blue") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black")) +
-  ggtitle("Model 1 In-sample Forecast") + xlab("Time") + ylab("Revenue")
+  ggtitle("Model 2 In-sample Forecast") + xlab("Time") + ylab("Revenue")
 
 #   Compute root mean squared error
 model2_test <- model2_test %>% mutate(Error = Revenue - Fcast_Revenue)
@@ -302,7 +302,7 @@ final_model_ts$A <- components$data$raw - components$data$seasonal
 
 #   Use ARIMA to select best ARIMA(p,d,q) model for A
 result_ARIMA_A <- final_model_ts %>% 
-  model(ARIMA(A ~ 1 + pdq(0, 1, 0) + PDQ(0,0,0), 
+  model(ARIMA(A ~ 1 + pdq(0,1,0) + PDQ(0,0,0), 
               stepwise=FALSE, approximation=FALSE, trace=FALSE))
 report(result_ARIMA_A)
 
